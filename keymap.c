@@ -9,6 +9,10 @@
 #define text_glitch_count 7
 #define text_glitch_dirty_count 3
 
+void matrix_init_user(void) {
+    srand(timer_read());  // Seed RNG
+}
+
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [0] = LAYOUT_split_3x6_3(
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
@@ -63,12 +67,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 oled_rotation_t oled_init_user(oled_rotation_t rotation) {
   return OLED_ROTATION_270;
 }
-
-static bool glitch = true;
-static bool dirty = false;
-static uint8_t frame_count = 15;
-static bool show_text = true;
-static uint16_t arasaka_timer;
 
 static const char PROGMEM logo_clean[frame_size] = {
   0x00, 0x00, 0x80, 0xc0, 0x60, 0x30, 0x18, 0x0c, 0x0c, 0x06, 0x06, 0xc3, 0xe3, 0xf3, 0xfb, 0xfb,
@@ -747,118 +745,76 @@ static const char PROGMEM text_glitch_dirty[text_glitch_dirty_count][frame_size]
   }
 };
 
-void arasaka_text_clean(void)
-{
-  oled_write_raw_P(text_clean, frame_size);
-}
+typedef struct {
+    bool glitch;
+    bool dirty;
+    uint8_t glitch_count;
+    uint32_t last_frame_time;
+} oled_anim_state_t;
 
-void arasaka_text_glitch_dirty(void)
-{
-  oled_write_raw_P(text_glitch_dirty[rand() % text_glitch_dirty_count], frame_size);
-}
-
-void arasaka_text_glitch(bool can_be_dirty)
-{
-  uint8_t frame = can_be_dirty
-    ? rand() % (text_glitch_count + text_glitch_dirty_count)
-    : rand() % text_glitch_count
-  ;
-
-  if (frame < text_glitch_count) {
-    oled_write_raw_P(text_glitch[frame], frame_size);
-
-    return;
-  }
-
-  arasaka_text_glitch_dirty();
-}
-
-void arasaka_logo_clean(void)
-{
-    oled_write_raw_P(logo_clean, frame_size);
-}
-
-void arasaka_logo_glitch_dirty(void)
-{
-  oled_write_raw_P(logo_glitch_dirty[rand() % logo_glitch_dirty_count], frame_size);
-}
-
-void arasaka_logo_glitch(bool can_be_dirty)
-{
-  uint8_t frame = can_be_dirty
-    ? rand() % (logo_glitch_count + logo_glitch_dirty_count)
-    : rand() % logo_glitch_count
-  ;
-
-  if (frame < logo_glitch_count) {
-    oled_write_raw_P(logo_glitch[frame], frame_size);
-
-    return;
-  }
-
-  arasaka_logo_glitch_dirty();
-}
-
-void arasaka_draw(void) {
-  uint16_t timer = timer_elapsed(arasaka_timer);
-
-  if (timer < 150) {
-    show_text ? arasaka_text_glitch_dirty() : arasaka_logo_glitch_dirty();
-
-    return;
-  }
-
-  if (timer < 250) {
-    show_text ? arasaka_text_glitch(true) : arasaka_logo_glitch(true);
-
-    return;
-  }
-
-  if (timer > 9750 && timer < 9850) {
-    show_text ? arasaka_text_glitch(true) : arasaka_logo_glitch(true);
-
-    return;
-  }
-
-  if (timer > 9850 && timer < 10000) {
-    show_text ? arasaka_text_glitch_dirty() : arasaka_logo_glitch_dirty();
-
-    return;
-  }
-
-  if (timer > 10000) {
-    show_text = !show_text;
-    arasaka_timer = timer_read();
-  }
-
-  if (glitch && 0 != frame_count) {
-    frame_count--;
-    show_text ? arasaka_text_glitch(true) : arasaka_logo_glitch(true);
-
-    return;
-  }
-
-  glitch = false;
-  dirty = false;
-
-  show_text ? arasaka_text_clean() : arasaka_logo_clean();
-
-  if (1 == rand() % 60) {
-    glitch = true;
-    frame_count = 1 + rand() % 4;
-
-    return;
-  }
-
-  if (1 == rand() % 60) {
-    glitch = true;
-    frame_count = 1 + rand() % 10;
-    dirty = frame_count > 5;
-  }
-}
+static oled_anim_state_t anim_text = { false, false, 0, 0 };
+static oled_anim_state_t anim_logo = { false, false, 0, 0 };
 
 bool oled_task_user(void) {
-  oled_set_brightness(0);
-  arasaka_draw();
-  return true;
+    const uint16_t frame_delay = 200;
+    uint32_t now = timer_read();
+
+    // LEFT OLED (Text)
+    if (is_keyboard_master()) {
+        if (now - anim_text.last_frame_time > frame_delay) {
+            anim_text.last_frame_time = now;
+
+            if (anim_text.glitch && anim_text.glitch_count > 0) {
+                anim_text.glitch_count--;
+
+                if (anim_text.dirty || (rand() % 2)) {
+                    oled_write_raw_P(text_glitch_dirty[rand() % text_glitch_dirty_count], frame_size);
+                } else {
+                    oled_write_raw_P(text_glitch[rand() % text_glitch_count], frame_size);
+                }
+
+                if (anim_text.glitch_count == 0) {
+                    anim_text.glitch = false;
+                }
+            } else {
+                oled_write_raw_P(text_clean, frame_size);
+
+                if (rand() % 20 == 0) {
+                    anim_text.glitch = true;
+                    anim_text.glitch_count = 1 + rand() % 4;
+                    anim_text.dirty = anim_text.glitch_count > 2;
+                }
+            }
+        }
+
+        // RIGHT OLED (Logo)
+    } else {
+        if (now - anim_logo.last_frame_time > frame_delay) {
+            anim_logo.last_frame_time = now;
+
+            if (anim_logo.glitch && anim_logo.glitch_count > 0) {
+                anim_logo.glitch_count--;
+
+                if (anim_logo.dirty || (rand() % 2)) {
+                    oled_write_raw_P(logo_glitch_dirty[rand() % logo_glitch_dirty_count], frame_size);
+                } else {
+                    oled_write_raw_P(logo_glitch[rand() % logo_glitch_count], frame_size);
+                }
+
+                if (anim_logo.glitch_count == 0) {
+                    anim_logo.glitch = false;
+                }
+            } else {
+                oled_write_raw_P(logo_clean, frame_size);
+
+                if (rand() % 20 == 0) {
+                    anim_logo.glitch = true;
+                    anim_logo.glitch_count = 1 + rand() % 4;
+                    anim_logo.dirty = anim_logo.glitch_count > 2;
+                }
+            }
+        }
+    }
+
+    return false;
 }
