@@ -745,6 +745,40 @@ static const char PROGMEM text_glitch_dirty[text_glitch_dirty_count][frame_size]
   }
 };
 
+const uint8_t font8x8_basic[128][8] PROGMEM = {
+    ['0'] = {0x3C, 0x66, 0xCE, 0xD6, 0xE6, 0x66, 0x3C, 0x00},
+    ['1'] = {0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00},
+    ['2'] = {0x3C, 0x66, 0x06, 0x1C, 0x30, 0x66, 0x7E, 0x00},
+    ['3'] = {0x3C, 0x66, 0x06, 0x1C, 0x06, 0x66, 0x3C, 0x00},
+    ['4'] = {0x0C, 0x1C, 0x3C, 0x6C, 0x7E, 0x0C, 0x0C, 0x00},
+    ['5'] = {0x7E, 0x60, 0x7C, 0x06, 0x06, 0x66, 0x3C, 0x00},
+    ['6'] = {0x1C, 0x30, 0x60, 0x7C, 0x66, 0x66, 0x3C, 0x00},
+    ['7'] = {0x7E, 0x66, 0x06, 0x0C, 0x18, 0x18, 0x18, 0x00},
+    ['8'] = {0x3C, 0x66, 0x66, 0x3C, 0x66, 0x66, 0x3C, 0x00},
+    ['9'] = {0x3C, 0x66, 0x66, 0x3E, 0x06, 0x0C, 0x38, 0x00},
+    ['W'] = {0x63, 0x63, 0x63, 0x6B, 0x7F, 0x36, 0x36, 0x00},
+    ['P'] = {0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00},
+    ['M'] = {0x63, 0x77, 0x7F, 0x6B, 0x63, 0x63, 0x63, 0x00},
+    [':'] = {0x00, 0x18, 0x18, 0x00, 0x00, 0x18, 0x18, 0x00}
+};
+
+// Main WPM rendering
+void render_wpm(void) {
+    uint8_t wpm = get_current_wpm();
+    char buf[4];
+    snprintf(buf, sizeof(buf), "%3d", wpm);
+
+    oled_set_cursor(0, 12);            // bottom of the screen (adjust if needed)
+    oled_write_P(PSTR("WPM:"), false); // label
+    oled_set_cursor(0, 14);            // offset to draw digits after label
+    oled_write(buf, false);            // draw the number
+}
+
+void matrix_scan_user(void) {
+    // this keeps the WPM calculation running
+    get_current_wpm();
+}
+
 typedef struct {
     bool glitch;
     bool dirty;
@@ -759,53 +793,27 @@ bool oled_task_user(void) {
     const uint16_t frame_delay = 200;
     uint32_t now = timer_read();
 
-    // LEFT OLED (Text)
+    // LEFT OLED (Logo)
     if (is_keyboard_master()) {
-        if (now - anim_text.last_frame_time > frame_delay) {
-            anim_text.last_frame_time = now;
-
-            if (anim_text.glitch && anim_text.glitch_count > 0) {
-                anim_text.glitch_count--;
-
-                if (anim_text.dirty || (rand() % 2)) {
-                    oled_write_raw_P(text_glitch_dirty[rand() % text_glitch_dirty_count], frame_size);
-                } else {
-                    oled_write_raw_P(text_glitch[rand() % text_glitch_count], frame_size);
-                }
-
-                if (anim_text.glitch_count == 0) {
-                    anim_text.glitch = false;
-                }
-            } else {
-                oled_write_raw_P(text_clean, frame_size);
-
-                if (rand() % 20 == 0) {
-                    anim_text.glitch = true;
-                    anim_text.glitch_count = 1 + rand() % 4;
-                    anim_text.dirty = anim_text.glitch_count > 2;
-                }
-            }
-        }
-
-        // RIGHT OLED (Logo)
-    } else {
         if (now - anim_logo.last_frame_time > frame_delay) {
             anim_logo.last_frame_time = now;
+
+            const char *frame;
 
             if (anim_logo.glitch && anim_logo.glitch_count > 0) {
                 anim_logo.glitch_count--;
 
                 if (anim_logo.dirty || (rand() % 2)) {
-                    oled_write_raw_P(logo_glitch_dirty[rand() % logo_glitch_dirty_count], frame_size);
+                    frame = logo_glitch_dirty[rand() % logo_glitch_dirty_count];
                 } else {
-                    oled_write_raw_P(logo_glitch[rand() % logo_glitch_count], frame_size);
+                    frame = logo_glitch[rand() % logo_glitch_count];
                 }
 
                 if (anim_logo.glitch_count == 0) {
                     anim_logo.glitch = false;
                 }
             } else {
-                oled_write_raw_P(logo_clean, frame_size);
+                frame = logo_clean;
 
                 if (rand() % 20 == 0) {
                     anim_logo.glitch = true;
@@ -813,8 +821,43 @@ bool oled_task_user(void) {
                     anim_logo.dirty = anim_logo.glitch_count > 2;
                 }
             }
+
+            oled_clear();                    // Clear before drawing
+            oled_write_raw_P(frame, 386);    // ✅ frame is always valid now
+            render_wpm();                    // Draw WPM below
+        }
+
+        // RIGHT OLED (Text)
+    } else {
+        if (now - anim_text.last_frame_time > frame_delay) {
+            anim_text.last_frame_time = now;
+
+            const char *frame;
+
+            if (anim_text.glitch && anim_text.glitch_count > 0) {
+                anim_text.glitch_count--;
+
+                if (anim_text.dirty || (rand() % 2)) {
+                    frame = text_glitch_dirty[rand() % text_glitch_dirty_count];
+                } else {
+                    frame = text_glitch[rand() % text_glitch_count];
+                }
+
+                if (anim_text.glitch_count == 0) {
+                    anim_text.glitch = false;
+                }
+            } else {
+                frame = text_clean;
+
+                if (rand() % 30 == 0) {
+                    anim_text.glitch = true;
+                    anim_text.glitch_count = 1 + rand() % 4;
+                    anim_text.dirty = anim_text.glitch_count > 2;
+                }
+            }
+
+            oled_write_raw_P(frame, frame_size);
         }
     }
-
     return false;
 }
