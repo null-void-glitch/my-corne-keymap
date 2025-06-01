@@ -1,3 +1,10 @@
+This is a extremly stripped down version of desync's keymap which i used as a starting point to complie my own.
+
+The following markdown is the original from desync, outlining the vast functionality he was able to put into his code.
+
+So if you want to truly unlock your cornes (or any qmk-ready board) full potential, i suggest checking it out.
+
+
 # Desync's Keymap
 ![Layout](images/layout.png?raw=true)
 
