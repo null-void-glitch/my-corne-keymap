@@ -1,4 +1,4 @@
-This is a extremly stripped down version of desync's keymap which i used as a starting point to complie my own.
+This is a extremly stripped down version of desync's keymap which i used as a starting point to compile my own.
 
 The following markdown is the original from desync, outlining the vast functionality he was able to put into his code.
 
