@@ -1,8 +1,8 @@
-G
+#define DEBUG
 #define PRINT_LAYER_STATE
 #include QMK_KEYBOARD_H
 #include "oled_driver.h"
-
+#include "oled_assets.h"
 #define frame_size 512
 #define logo_glitch_count 5
 #define logo_glitch_dirty_count 2
@@ -10,7 +10,6 @@ G
 #define text_glitch_dirty_count 3
 
 static uint8_t oled_brightness_master = 0x7F;
-static uint8_t oled_brightness_slave = 0x7F;
 
 enum custom_keycodes {
     OLED_UP = SAFE_RANGE,
@@ -68,3 +67,124 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                                       //`--------------------------'  `--------------------------'
   )
 };
+
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    if (!record->event.pressed) return true;
+
+    if (is_keyboard_master()) {
+        switch (keycode) {
+            case OLED_UP:
+                oled_brightness_master = oled_brightness_master + 0x10 > 0xFF ? 0xFF : oled_brightness_master + 0x10;
+                return false;
+            case OLED_DN:
+                oled_brightness_master = oled_brightness_master < 0x10 ? 0x00 : oled_brightness_master - 0x10;
+                return false;
+            case OLED_BRIGHTNESS_TOGGLE:
+                oled_brightness_master = (oled_brightness_master == 0x00) ? 0x7F : 0x00;
+                return false;
+        }
+    }
+    return true;
+}
+
+
+// Main WPM rendering
+void render_wpm(void) {
+    uint8_t wpm = get_current_wpm();
+    char buf[4];
+    snprintf(buf, sizeof(buf), "%3d", wpm);
+
+    oled_set_cursor(0, 12);            // bottom of the screen (adjust if needed)
+    oled_write_P(PSTR("WPM:"), false); // label
+    oled_set_cursor(0, 14);            // offset to draw digits after label
+    oled_write(buf, false);            // draw the number
+}
+
+void matrix_scan_user(void) {
+    // this keeps the WPM calculation running
+    get_current_wpm();
+}
+
+typedef struct {
+    bool glitch;
+    bool dirty;
+    uint8_t glitch_count;
+    uint32_t last_frame_time;
+} oled_anim_state_t;
+
+static oled_anim_state_t anim_text = { false, false, 0, 0 };
+static oled_anim_state_t anim_logo = { false, false, 0, 0 };
+
+bool oled_task_user(void) {
+    const uint16_t frame_delay = 200;
+    uint32_t now = timer_read();
+    // LEFT OLED (Logo)
+    if (is_keyboard_master()) {
+        oled_set_brightness(oled_brightness_master);
+        if (now - anim_logo.last_frame_time > frame_delay) {
+            anim_logo.last_frame_time = now;
+
+            const char *frame;
+
+            if (anim_logo.glitch && anim_logo.glitch_count > 0) {
+                anim_logo.glitch_count--;
+
+                if (anim_logo.dirty || (rand() % 2)) {
+                    frame = logo_glitch_dirty[rand() % logo_glitch_dirty_count];
+                } else {
+                    frame = logo_glitch[rand() % logo_glitch_count];
+                }
+
+                if (anim_logo.glitch_count == 0) {
+                    anim_logo.glitch = false;
+                }
+            } else {
+                frame = logo_clean;
+
+                if (rand() % 20 == 0) {
+                    anim_logo.glitch = true;
+                    anim_logo.glitch_count = 1 + rand() % 4;
+                    anim_logo.dirty = anim_logo.glitch_count > 2;
+                }
+            }
+            oled_set_brightness(oled_brightness_master);
+            oled_clear();                    // Clear before drawing
+            oled_write_raw_P(frame, 386);    // ✅ frame is always valid now
+            render_wpm();                    // Draw WPM below
+        }
+
+        // RIGHT OLED (Text)
+    } else {
+        oled_set_brightness(oled_brightness_master);
+        if (now - anim_text.last_frame_time > frame_delay) {
+            anim_text.last_frame_time = now;
+
+            const char *frame;
+
+            if (anim_text.glitch && anim_text.glitch_count > 0) {
+                anim_text.glitch_count--;
+
+                if (anim_text.dirty || (rand() % 2)) {
+                    frame = text_glitch_dirty[rand() % text_glitch_dirty_count];
+                } else {
+                    frame = text_glitch[rand() % text_glitch_count];
+                }
+
+                if (anim_text.glitch_count == 0) {
+                    anim_text.glitch = false;
+                }
+            } else {
+                frame = text_clean;
+
+                if (rand() % 30 == 0) {
+                    anim_text.glitch = true;
+                    anim_text.glitch_count = 1 + rand() % 4;
+                    anim_text.dirty = anim_text.glitch_count > 2;
+                }
+            }
+            oled_set_brightness(oled_brightness_master);
+            oled_write_raw_P(frame, frame_size);
+        }
+    }
+    return false;
+}
