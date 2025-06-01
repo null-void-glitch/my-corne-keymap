@@ -14,6 +14,13 @@
 #include "oled_assets.h"
 #include "eeprom.h"
 
+// Custom keys
+enum custom_keycodes {
+    OLED_UP = SAFE_RANGE,
+    OLED_DN,
+    OLED_BRIGHTNESS_TOGGLE
+};
+
 // Keymap (after flash customizable with VIA) add more layers if needed
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [0] = LAYOUT_split_3x6_3(
@@ -69,12 +76,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 // Brightness handling
 static uint8_t oled_brightness_master = 0x7F;
 
-enum custom_keycodes {
-    OLED_UP = SAFE_RANGE,
-    OLED_DN,
-    OLED_BRIGHTNESS_TOGGLE
-};
-
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (!record->event.pressed) return true;
 
@@ -96,7 +97,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     }
     return true;
 }
-
 
 // Main WPM rendering
 void render_wpm(void) {
