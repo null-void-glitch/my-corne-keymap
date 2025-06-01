@@ -104,10 +104,10 @@ void render_wpm(void) {
     char buf[4];
     snprintf(buf, sizeof(buf), "%3d", wpm);
 
-    oled_set_cursor(0, 12);            // bottom of the screen (adjust if needed)
-    oled_write_P(PSTR("WPM:"), false); // label
-    oled_set_cursor(0, 14);            // offset to draw digits after label
-    oled_write(buf, false);            // draw the number
+    oled_set_cursor(0, 12);            
+    oled_write_P(PSTR("WPM:"), false); 
+    oled_set_cursor(0, 14);          
+    oled_write(buf, false);
 }
 
 void matrix_scan_user(void) {
@@ -158,9 +158,9 @@ bool oled_task_user(void) {
                 }
             }
             oled_set_brightness(oled_brightness_master);
-            oled_clear();                    // Clear before drawing
-            oled_write_raw_P(frame, 386);    // ✅ frame is always valid now
-            render_wpm();                    // Draw WPM below
+            oled_clear();                    
+            oled_write_raw_P(frame, 386);    
+            render_wpm();                    
         }
 
         // RIGHT OLED (Text)
