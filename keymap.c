@@ -1,22 +1,20 @@
+// Definitions
 #define DEBUG
 #define PRINT_LAYER_STATE
 #include QMK_KEYBOARD_H
-#include "oled_driver.h"
-#include "oled_assets.h"
 #define frame_size 512
+#define EEPROM_ADDR_BRIGHTNESS 0x10
 #define logo_glitch_count 5
 #define logo_glitch_dirty_count 2
 #define text_glitch_count 7
 #define text_glitch_dirty_count 3
 
-static uint8_t oled_brightness_master = 0x7F;
+// Includes
+#include "oled_driver.h"
+#include "oled_assets.h"
+#include "eeprom.h"
 
-enum custom_keycodes {
-    OLED_UP = SAFE_RANGE,
-    OLED_DN,
-    OLED_BRIGHTNESS_TOGGLE
-};
-
+// Keymap (after flash customizable with VIA) add more layers if needed
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [0] = LAYOUT_split_3x6_3(
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
@@ -68,6 +66,15 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   )
 };
 
+// Brightness handling
+static uint8_t oled_brightness_master = 0x7F;
+
+enum custom_keycodes {
+    OLED_UP = SAFE_RANGE,
+    OLED_DN,
+    OLED_BRIGHTNESS_TOGGLE
+};
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (!record->event.pressed) return true;
 
@@ -75,12 +82,15 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         switch (keycode) {
             case OLED_UP:
                 oled_brightness_master = oled_brightness_master + 0x10 > 0xFF ? 0xFF : oled_brightness_master + 0x10;
+                eeprom_update_byte((uint8_t*)EEPROM_ADDR_BRIGHTNESS, oled_brightness_master);
                 return false;
             case OLED_DN:
                 oled_brightness_master = oled_brightness_master < 0x10 ? 0x00 : oled_brightness_master - 0x10;
+                eeprom_update_byte((uint8_t*)EEPROM_ADDR_BRIGHTNESS, oled_brightness_master);
                 return false;
             case OLED_BRIGHTNESS_TOGGLE:
                 oled_brightness_master = (oled_brightness_master == 0x00) ? 0x7F : 0x00;
+                eeprom_update_byte((uint8_t*)EEPROM_ADDR_BRIGHTNESS, oled_brightness_master);
                 return false;
         }
     }
@@ -155,7 +165,8 @@ bool oled_task_user(void) {
 
         // RIGHT OLED (Text)
     } else {
-        oled_set_brightness(oled_brightness_master);
+        uint8_t brightness = eeprom_read_byte((uint8_t*)EEPROM_ADDR_BRIGHTNESS);
+            oled_set_brightness(brightness);
         if (now - anim_text.last_frame_time > frame_delay) {
             anim_text.last_frame_time = now;
 
@@ -182,7 +193,6 @@ bool oled_task_user(void) {
                     anim_text.dirty = anim_text.glitch_count > 2;
                 }
             }
-            oled_set_brightness(oled_brightness_master);
             oled_write_raw_P(frame, frame_size);
         }
     }
