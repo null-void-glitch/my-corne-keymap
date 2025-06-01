@@ -162,7 +162,6 @@ bool oled_task_user(void) {
             oled_write_raw_P(frame, 386);    
             render_wpm();                    
         }
-
         // RIGHT OLED (Text)
     } else {
         uint8_t brightness = eeprom_read_byte((uint8_t*)EEPROM_ADDR_BRIGHTNESS);
